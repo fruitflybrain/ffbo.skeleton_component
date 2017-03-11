@@ -1,0 +1,137 @@
+import sys
+
+
+from twisted.internet.defer import inlineCallbacks, returnValue
+from twisted.logger import Logger
+
+from autobahn.twisted.util import sleep
+from autobahn.twisted.wamp import ApplicationSession, ApplicationRunner
+from autobahn.wamp.exception import ApplicationError
+from autobahn.wamp.types import RegisterOptions
+
+import os
+import argparse
+import six
+import txaio
+
+import time
+
+# Neuroarch Imports
+import argparse
+
+import numpy as np
+import simplejson as json
+
+from config import *
+
+from autobahn.wamp import auth
+
+from twisted.internet import reactor, threads
+from itertools import islice
+
+
+
+class AppSession(ApplicationSession):
+
+    log = Logger()
+    
+    @inlineCallbacks
+    def onJoin(self, details):
+        print "Joined"
+        
+        # Subscribe to Server Updates
+        @inlineCallbacks
+        def on_server_update(msg):
+            self.log.info("server update received: {msg}", msg=msg)
+
+        yield self.subscribe(on_server_update, 'ffbo.server.update')
+        self.log.info("subscribed to topic 'ffbo.server.update'")
+    
+    def onConnect(self):
+        if self.config.extra['auth']:
+            self.join(self.config.realm, [u"wampcra"], user)
+        else:
+            self.join(self.config.realm, [], user)
+
+    def onChallenge(self, challenge):
+        if challenge.method == u"wampcra":
+            print("WAMP-CRA challenge received: {}".format(challenge))
+            
+            if u'salt' in challenge.extra:
+                # salted secret
+                key = auth.derive_key(secret,
+                                      challenge.extra['salt'],
+                                      challenge.extra['iterations'],
+                                      challenge.extra['keylen'])
+            else:
+                # plain, unsalted secret
+                key = secret
+                
+            # compute signature for challenge, using the key
+            signature = auth.compute_wcs(key, challenge.extra['challenge'])
+            
+            # return the signature to the router for verification
+            return signature
+
+        else:
+            raise Exception("Invalid authmethod {}".format(challenge.method))
+
+
+if __name__ == '__main__':
+    from twisted.internet._sslverify import OpenSSLCertificateAuthorities
+    from twisted.internet.ssl import CertificateOptions
+    import OpenSSL.crypto
+    
+                                           
+    
+    # parse command line parameters
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-d', '--debug', action='store_true', help='Enable debug output.')
+    parser.add_argument('--url', dest='url', type=six.text_type, default=url,
+                        help='The router URL (defaults to value from config.py)')
+    parser.add_argument('--realm', dest='realm', type=six.text_type, default=realm,
+                        help='The realm to join (defaults to value from config.py).')
+    parser.add_argument('--ca_cert', dest='ca_cert_file', type=six.text_type,
+                        default=ca_cert_file,
+                        help='Root CA PEM certificate file (defaults to value from config.py).')
+    parser.add_argument('--int_cert', dest='intermediate_cert_file', type=six.text_type,
+                        default=intermediate_cert_file,
+                        help='Intermediate PEM certificate file (defaults to value from config.py).')
+    parser.add_argument('--no-ssl', dest='ssl', action='store_false')
+    parser.add_argument('--no-auth', dest='authentication', action='store_false')
+    parser.set_defaults(ssl=ssl)
+    parser.set_defaults(authentication=authentication)
+    parser.set_defaults(debug=debug)
+    
+    args = parser.parse_args()
+
+    
+    # start logging
+    if args.debug:
+        txaio.start_logging(level='debug')
+    else:
+        txaio.start_logging(level='info')
+
+   # any extra info we want to forward to our ClientSession (in self.config.extra)
+    extra = {'auth': args.authentication}
+
+    if args.ssl:
+        st_cert=open(args.ca_cert_file, 'rt').read()
+        c=OpenSSL.crypto
+        ca_cert=c.load_certificate(c.FILETYPE_PEM, st_cert)
+        
+        st_cert=open(args.intermediate_cert_file, 'rt').read()
+        intermediate_cert=c.load_certificate(c.FILETYPE_PEM, st_cert)
+        
+        certs = OpenSSLCertificateAuthorities([ca_cert, intermediate_cert])
+        ssl_con = CertificateOptions(trustRoot=certs)
+
+        # now actually run a WAMP client using our session class ClientSession
+        runner = ApplicationRunner(url=args.url, realm=args.realm, extra=extra, ssl=ssl_con)
+
+    else:
+        # now actually run a WAMP client using our session class ClientSession
+        runner = ApplicationRunner(url=args.url, realm=args.realm, extra=extra)
+
+    runner.run(AppSession)
+
