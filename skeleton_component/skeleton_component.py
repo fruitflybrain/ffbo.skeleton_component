@@ -73,7 +73,7 @@ class AppSession(ApplicationSession):
             return "world"
 
         yield self.register(hello, 'ffbo.skeleton_component.hello')
-        self.log.info("procedure get_uptime() registered")
+        self.log.info("procedure hello() registered")
     
     def onConnect(self):
         if self.config.extra['auth']:
