@@ -59,12 +59,20 @@ class AppSession(ApplicationSession):
         yield self.subscribe(on_server_update, 'ffbo.server.update')
         self.log.info("subscribed to topic 'ffbo.server.update'")
     
-    # REGISTER a procedure for remote calling
+        # REGISTER a procedure for remote calling
         # 
         def get_uptime():
             return "--- %s seconds ---" % (time.time() - start_time)
 
         yield self.register(get_uptime, 'ffbo.skeleton_component.get_uptime')
+        self.log.info("procedure get_uptime() registered")
+        
+        # REGISTER a procedure for remote calling
+        # 
+        def hello():
+            return "world"
+
+        yield self.register(hello, 'ffbo.skeleton_component.hello')
         self.log.info("procedure get_uptime() registered")
     
     def onConnect(self):
