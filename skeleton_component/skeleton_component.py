@@ -39,6 +39,18 @@ class AppSession(ApplicationSession):
     def onJoin(self, details):
         print "Joined"
         
+        # CALL a remote procedure
+        # Ask Processor for the latest connected server lists.
+        try:     
+            res = yield self.call('ffbo.processor.server_information')
+            self.log.info("'server_information' called with result: {result}",
+                                      result=res)
+        except ApplicationError as e:
+            # ignore errors due to the frontend not yet having
+            # registered the procedure we would like to call
+            if e.error != 'wamp.error.no_such_procedure':
+                raise e
+                
         # Subscribe to Server Updates
         @inlineCallbacks
         def on_server_update(msg):
@@ -46,6 +58,14 @@ class AppSession(ApplicationSession):
 
         yield self.subscribe(on_server_update, 'ffbo.server.update')
         self.log.info("subscribed to topic 'ffbo.server.update'")
+    
+    # REGISTER a procedure for remote calling
+        # 
+        def get_uptime():
+            return "--- %s seconds ---" % (time.time() - start_time)
+
+        yield self.register(get_uptime, 'ffbo.ffboApp.get_uptime')
+        self.log.info("procedure get_uptime() registered")
     
     def onConnect(self):
         if self.config.extra['auth']:
