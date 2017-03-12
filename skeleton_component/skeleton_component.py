@@ -47,6 +47,14 @@ class AppSession(ApplicationSession):
         yield self.subscribe(on_server_update, 'ffbo.server.update')
         self.log.info("subscribed to topic 'ffbo.server.update'")
     
+        # REGISTER a procedure for remote calling
+        # 
+        def hello():
+            return "world"
+
+        yield self.register(hello, 'ffbo.skeleton_component.hello')
+        self.log.info("procedure get_uptime() registered")    
+    
     def onConnect(self):
         if self.config.extra['auth']:
             self.join(self.config.realm, [u"wampcra"], user)
